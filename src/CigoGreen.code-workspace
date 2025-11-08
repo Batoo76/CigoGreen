@@ -1,11 +1,11 @@
 {
 	"folders": [
 		{
-			"path": "../../../../../CigoGreen"
-		},
-		{
 			"name": "CigoGreen",
 			"path": ".."
+		},
+		{
+			"path": "../../../../GitHub/cigo-2025-main"
 		}
 	],
 	"settings": {}

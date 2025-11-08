@@ -1,17 +1,50 @@
 #include <Arduino.h>
 
-constexpr uint8_t EMITTER_PIN = 4;           // Digital pin powering the IR emitter diode
-constexpr uint8_t SENSOR_PIN = 8;            // Digital pin reading the photodiode receiver
-constexpr uint32_t REPORT_INTERVAL_MS = 500; // Interval for serial reporting
-constexpr uint16_t DEBOUNCE_MS = 10;         // Minimal time between state changes to filter noise
+constexpr uint32_t SERIAL_BAUD = 9600;
+constexpr uint8_t EMITTER_PIN = 4;              // Digital pin powering the IR emitter diode
+constexpr uint8_t SENSOR_PIN = 8;               // Digital pin reading the photodiode receiver
+constexpr uint32_t REPORT_INTERVAL_MS = 500;    // Interval for periodic serial reporting
+constexpr uint16_t DEBOUNCE_MS = 10;            // Minimal time between state changes to filter noise
+constexpr uint16_t MANUAL_INCREMENT_DELAY_MS = 200; // Delay after manual increment to mimic previous behavior
 
 uint32_t beamBreakCount = 0;
 bool lastSensorState = HIGH;
 uint32_t lastTransitionTime = 0;
 uint32_t lastReportTime = 0;
 
+void reportCount() {
+  Serial.print(F("COUNT:"));
+  Serial.println(beamBreakCount);
+  lastReportTime = millis();
+}
+
+void handleSerialCommands() {
+  while (Serial.available() > 0) {
+    const char command = static_cast<char>(tolower(Serial.read()));
+    switch (command) {
+      case 'm': // manual increment
+        ++beamBreakCount;
+        reportCount();
+        if (MANUAL_INCREMENT_DELAY_MS > 0) {
+          delay(MANUAL_INCREMENT_DELAY_MS);
+        }
+        break;
+      case 'c': // current count request
+        reportCount();
+        break;
+      case 'z': // reset count
+        beamBreakCount = 0;
+        reportCount();
+        break;
+      default:
+        // ignore unknown commands
+        break;
+    }
+  }
+}
+
 void setup() {
-  Serial.begin(9600);
+  Serial.begin(SERIAL_BAUD);
 
   pinMode(EMITTER_PIN, OUTPUT);
   digitalWrite(EMITTER_PIN, HIGH); // Keep the emitter on continuously
@@ -21,17 +54,20 @@ void setup() {
   lastTransitionTime = millis();
   lastReportTime = lastTransitionTime;
 
-  Serial.println("Photobarrier counter ready.");
+  Serial.println(F("Photobarrier counter ready."));
+  reportCount();
 }
 
 void loop() {
   const uint32_t now = millis();
   const bool currentState = digitalRead(SENSOR_PIN);
 
+  handleSerialCommands();
+
   if (currentState != lastSensorState && now - lastTransitionTime >= DEBOUNCE_MS) {
     if (lastSensorState == LOW && currentState == HIGH) {
       ++beamBreakCount;
-      delay(200);
+      reportCount();
     }
 
     lastSensorState = currentState;
@@ -39,8 +75,6 @@ void loop() {
   }
 
   if (now - lastReportTime >= REPORT_INTERVAL_MS) {
-    Serial.print("Beam breaks: ");
-    Serial.println(beamBreakCount);
-    lastReportTime = now;
+    reportCount();
   }
 }
